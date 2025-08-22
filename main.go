@@ -1,8 +1,6 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -10,79 +8,50 @@ import (
 	"os"
 )
 
-var mixpanelToken string
-
-// Mixpanel event format
-type MixpanelEvent struct {
-	Event      string                 `json:"event"`
-	Properties map[string]interface{} `json:"properties"`
-}
-
-// API handler
+// handler function
 func handler(w http.ResponseWriter, r *http.Request) {
+	// Log request method and path
 	log.Printf("Received %s request for %s\n", r.Method, r.URL.Path)
 
-	// Read request body
+	// Log headers
+	log.Println("Headers:")
+	for name, values := range r.Header {
+		for _, value := range values {
+			log.Printf("%s: %s\n", name, value)
+		}
+	}
+
+	// Read and log body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "Error reading body", http.StatusBadRequest)
-		return
+		log.Printf("Error reading body: %v", err)
+	} else {
+		log.Printf("Body: %s\n", string(body))
 	}
 	defer r.Body.Close()
 
-	log.Printf("Request body: %s\n", string(body))
-
-	// Unmarshal into MixpanelEvent
-	var event MixpanelEvent
-	if err := json.Unmarshal(body, &event); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	// Ensure Mixpanel token is set
-	if mixpanelToken == "" {
-		http.Error(w, "Mixpanel token not configured", http.StatusInternalServerError)
-		return
-	}
-
-	// Add token to event properties
-	event.Properties["token"] = mixpanelToken
-
-	// Encode event as JSON
-	eventData, _ := json.Marshal(event)
-	reqBody := []byte(fmt.Sprintf(`{"event": "%s", "properties": %s}`, event.Event, string(eventData)))
-
-	// Send to Mixpanel track API
-	resp, err := http.Post("https://api.mixpanel.com/track?ip=1", "application/json", bytes.NewBuffer(reqBody))
-	if err != nil {
-		log.Printf("Error sending to Mixpanel: %v", err)
-		http.Error(w, "Failed to send to Mixpanel", http.StatusInternalServerError)
-		return
-	}
-	defer resp.Body.Close()
-
-	log.Printf("Mixpanel response: %s", resp.Status)
-
+	// Respond back
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Event logged and sent to Mixpanel")
+	fmt.Fprintln(w, "✅ Request received and logged")
+}
+
+func healthCheck(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintln(w, "OK")
 }
 
 func main() {
-	// Load Mixpanel token from environment variable
-	mixpanelToken = os.Getenv("MIXPANEL_TOKEN")
-	if mixpanelToken == "" {
-		log.Fatal("MIXPANEL_TOKEN environment variable not set")
+	// Routes
+	http.HandleFunc("/", handler)
+	http.HandleFunc("/healthz", healthCheck)
+
+	// Render provides PORT via environment variable
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "10000" // fallback for local run
 	}
 
-	http.HandleFunc("/track", handler)
-
-	port := ":10000"
-	if fromEnv := os.Getenv("PORT"); fromEnv != "" {
-		port = ":" + fromEnv
-	}
-
-	log.Printf("Starting server on %s\n", port)
-	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("Server failed: %v\n", err)
+	log.Printf("🚀 Starting server on :%s\n", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatalf("❌ Server failed: %v\n", err)
 	}
 }
