@@ -1,20 +1,26 @@
 package main
 
 import (
-	"fmt"
+	"encoding/json"
 	"io"
 	"log"
 	"net/http"
-    "os"
+	"os"
 )
+
+// Response structure for clean JSON replies
+type ApiResponse struct {
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
 
 // handler function
 func handler(w http.ResponseWriter, r *http.Request) {
 	// Log request method and path
-	log.Printf("Received %s request for %s\n", r.Method, r.URL.Path)
+	log.Printf("📥 Received %s request for %s\n", r.Method, r.URL.Path)
 
 	// Log headers
-	log.Println("Headers:")
+	log.Println("🔹 Headers:")
 	for name, values := range r.Header {
 		for _, value := range values {
 			log.Printf("%s: %s\n", name, value)
@@ -24,28 +30,36 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	// Read and log body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Printf("Error reading body: %v", err)
+		log.Printf("❌ Error reading body: %v", err)
+	} else if len(body) > 0 {
+		log.Printf("📦 Body: %s\n", string(body))
 	} else {
-		log.Printf("Body: %s\n", string(body))
+		log.Println("📦 Body: <empty>")
 	}
 	defer r.Body.Close()
 
-	// Send response
+	// Always respond in JSON
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprintln(w, "Request received and logged")
+
+	response := ApiResponse{
+		Status:  "success",
+		Message: "Request received and logged",
+	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
 	http.HandleFunc("/", handler)
 
-	// Render provides PORT via environment variable
+	// Use env PORT if provided (for Render, Vercel, etc.)
 	port := ":10000" // fallback
 	if fromEnv := os.Getenv("PORT"); fromEnv != "" {
 		port = ":" + fromEnv
 	}
 
-	log.Printf("Starting server on %s\n", port)
+	log.Printf("🚀 Starting faceless server on %s\n", port)
 	if err := http.ListenAndServe(port, nil); err != nil {
-		log.Fatalf("Server failed: %v\n", err)
+		log.Fatalf("❌ Server failed: %v\n", err)
 	}
 }
