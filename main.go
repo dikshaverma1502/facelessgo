@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 )
 
 type Event struct {
@@ -13,25 +15,40 @@ type Event struct {
 }
 
 func trackHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("📩 Received POST request for /track")
+	log.Printf("Received %s request for %s\n", r.Method, r.URL.Path)
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Error reading body", http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	log.Printf("Body: %s\n", string(body))
 
 	var event Event
-	if err := json.NewDecoder(r.Body).Decode(&event); err != nil {
-		log.Printf("❌ Failed to decode body: %v\n", err)
-		http.Error(w, "Bad Request", http.StatusBadRequest)
+	if err := json.Unmarshal(body, &event); err != nil {
+		log.Printf("Error parsing JSON: %v", err)
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	log.Printf("✅ Event: %s\n", event.Event)
-	log.Printf("🔹 Properties: %+v\n", event.Properties)
+	log.Printf("Event received: %s", event.Event)
+	log.Printf("Properties: %+v", event.Properties)
 
-	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	fmt.Fprintln(w, `{"status":"ok"}`)
 }
 
 func main() {
 	http.HandleFunc("/track", trackHandler)
-	log.Println("🚀 Server starting on port 10000")
-	log.Fatal(http.ListenAndServe(":10000", nil))
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "10000"
+	}
+	log.Printf("Starting server on :%s\n", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatalf("Server failed: %v\n", err)
+	}
 }
